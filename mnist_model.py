@@ -1,64 +1,55 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 import datetime
 import os
 
 
+def set_seed(seed=42):
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+
 class MNISTModel(nn.Module):
     def __init__(self):
         super(MNISTModel, self).__init__()
+        self.features = nn.Sequential(
+            # First conv block
+            nn.Conv2d(1, 16, kernel_size=3, padding=1),  # 28x28x16
+            nn.BatchNorm2d(16),
+            nn.ReLU(),
+            nn.MaxPool2d(2),  # 14x14x16
+            # Second conv block
+            nn.Conv2d(16, 32, kernel_size=3, padding=1),  # 14x14x32
+            nn.BatchNorm2d(32),
+            nn.ReLU(),
+            nn.MaxPool2d(2),  # 7x7x32
+            nn.Dropout(0.2),
+        )
 
-        # First Block
-        self.conv1 = nn.Conv2d(1, 16, kernel_size=3)  # 28x28 -> 26x26
-        self.bn1 = nn.BatchNorm2d(16)
-        self.relu1 = nn.ReLU()
-
-        # Second Block
-        self.conv2 = nn.Conv2d(16, 32, kernel_size=3)  # 26x26 -> 24x24
-        self.bn2 = nn.BatchNorm2d(32)
-        self.relu2 = nn.ReLU()
-        self.pool1 = nn.MaxPool2d(2, 2)  # 24x24 -> 12x12
-
-        # Third Block
-        self.conv3 = nn.Conv2d(32, 64, kernel_size=3)  # 12x12 -> 10x10
-        self.bn3 = nn.BatchNorm2d(64)
-        self.relu3 = nn.ReLU()
-        self.pool2 = nn.MaxPool2d(2, 2)  # 10x10 -> 5x5
-
-        # Fully Connected Layers
-        self.fc1 = nn.Linear(64 * 5 * 5, 128)
-        self.relu_fc1 = nn.ReLU()
-        self.fc2 = nn.Linear(128, 10)
+        self.classifier = nn.Sequential(
+            nn.Linear(7 * 7 * 32, 10)  # Fully Connected Layer
+        )
 
     def forward(self, x):
-        x = self.conv1(x)
-        x = self.bn1(x)
-        x = self.relu1(x)
-
-        x = self.conv2(x)
-        x = self.bn2(x)
-        x = self.relu2(x)
-        x = self.pool1(x)
-
-        x = self.conv3(x)
-        x = self.bn3(x)
-        x = self.relu3(x)
-        x = self.pool2(x)
-
-        x = x.view(-1, 64 * 5 * 5)  # Flatten
-        x = self.relu_fc1(self.fc1(x))
-        x = self.fc2(x)
+        x = self.features(x)
+        x = torch.flatten(x, 1)
+        x = self.classifier(x)
         return x
 
     def train_model(self, train_loader, epochs=1, device="cuda"):
+        set_seed()  # 재현성을 위한 시드 설정
+
         self.to(device)
         criterion = nn.CrossEntropyLoss()
-        optimizer = optim.Adam(self.parameters())
+        optimizer = optim.Adam(self.parameters(), lr=0.002, weight_decay=1e-5)
 
         history = {"accuracy": [], "loss": []}
+        total_batches = len(train_loader)
 
         for epoch in range(epochs):
             running_loss = 0.0
@@ -66,7 +57,7 @@ class MNISTModel(nn.Module):
             total = 0
 
             self.train()
-            for inputs, labels in train_loader:
+            for i, (inputs, labels) in enumerate(train_loader):
                 inputs, labels = inputs.to(device), labels.to(device)
 
                 optimizer.zero_grad()
@@ -80,8 +71,16 @@ class MNISTModel(nn.Module):
                 total += labels.size(0)
                 correct += predicted.eq(labels).sum().item()
 
-            epoch_loss = running_loss / len(train_loader)
+                if (i + 1) % 100 == 0:
+                    print(
+                        f"Epoch {epoch+1} - Batch [{i + 1}/{total_batches}], "
+                        f"Loss: {running_loss/100:.4f}, "
+                        f"Accuracy: {100.*correct/total:.2f}%"
+                    )
+                    running_loss = 0.0
+
             epoch_acc = correct / total
+            epoch_loss = running_loss / len(train_loader)
 
             history["accuracy"].append(epoch_acc)
             history["loss"].append(epoch_loss)
@@ -89,15 +88,12 @@ class MNISTModel(nn.Module):
         return history
 
     def save_model(self):
-        # Create models directory if it doesn't exist
         model_dir = "models"
         os.makedirs(model_dir, exist_ok=True)
 
-        # Create model path with timestamp
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         model_path = os.path.join(model_dir, f"mnist_model_{timestamp}.pth")
 
-        # Save the model
         torch.save(self.state_dict(), model_path)
         return model_path
 
@@ -105,11 +101,9 @@ class MNISTModel(nn.Module):
         return sum(p.numel() for p in self.parameters())
 
 
-def load_and_preprocess_data(batch_size=32):
+def load_and_preprocess_data(batch_size=64):
     transform = transforms.Compose(
-        [
-            transforms.ToTensor(),
-        ]
+        [transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))]
     )
 
     train_dataset = datasets.MNIST(
@@ -117,7 +111,13 @@ def load_and_preprocess_data(batch_size=32):
     )
     test_dataset = datasets.MNIST("./data", train=False, transform=transform)
 
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=batch_size,
+        shuffle=True,
+        num_workers=0,
+        generator=torch.Generator().manual_seed(42),
+    )
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
     return train_loader, test_loader
