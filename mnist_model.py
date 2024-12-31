@@ -10,7 +10,7 @@ import os
 
 def set_seed(seed=42):
     torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
+    torch.cuda.manual_seed(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
@@ -66,11 +66,9 @@ class MNISTModel(nn.Module):
         return x
 
     def train_model(self, train_loader, epochs=1, device="cuda"):
-        set_seed()  # 재현성을 위한 시드 설정
-
         self.to(device)
         criterion = nn.CrossEntropyLoss()
-        optimizer = optim.Adam(self.parameters(), lr=0.002, weight_decay=1e-5)
+        optimizer = optim.Adam(self.parameters(), lr=0.001)
 
         history = {"accuracy": [], "loss": []}
         total_batches = len(train_loader)
@@ -97,7 +95,7 @@ class MNISTModel(nn.Module):
 
                 if (i + 1) % 100 == 0:
                     print(
-                        f"Epoch {epoch+1} - Batch [{i + 1}/{total_batches}], "
+                        f"Epoch [{epoch + 1}], Step [{i + 1}/{total_batches}], "
                         f"Loss: {running_loss/100:.4f}, "
                         f"Accuracy: {100.*correct/total:.2f}%"
                     )
@@ -105,7 +103,6 @@ class MNISTModel(nn.Module):
 
             epoch_acc = correct / total
             epoch_loss = running_loss / len(train_loader)
-
             history["accuracy"].append(epoch_acc)
             history["loss"].append(epoch_loss)
 
@@ -125,7 +122,7 @@ class MNISTModel(nn.Module):
         return sum(p.numel() for p in self.parameters())
 
 
-def load_and_preprocess_data(batch_size=64):
+def load_and_preprocess_data(batch_size=32):
     transform = transforms.Compose(
         [transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))]
     )
@@ -138,7 +135,6 @@ def load_and_preprocess_data(batch_size=64):
         train_dataset,
         batch_size=batch_size,
         shuffle=True,
-        num_workers=0,
         generator=torch.Generator().manual_seed(42),
     )
 

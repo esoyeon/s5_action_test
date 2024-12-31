@@ -18,7 +18,7 @@ def model(device):
 
 @pytest.fixture
 def dataloaders():
-    return load_and_preprocess_data(batch_size=64)
+    return load_and_preprocess_data()
 
 
 def test_parameter_count(model):
@@ -30,9 +30,10 @@ def test_parameter_count(model):
 
 def test_model_accuracy(model, dataloaders, device):
     train_loader, _ = dataloaders
-    # Use a smaller subset for quick testing
+    # batch_size를 64에서 32로 변경
     subset_loader = torch.utils.data.DataLoader(
-        torch.utils.data.Subset(train_loader.dataset, range(1000)), batch_size=64
+        torch.utils.data.Subset(train_loader.dataset, range(1000)),
+        batch_size=32,  # 64 -> 32
     )
     history = model.train_model(subset_loader, epochs=1, device=device)
     final_accuracy = history["accuracy"][-1]
@@ -50,7 +51,8 @@ def test_input_output_shape(model, device):
 def test_model_runtime(model, dataloaders, device):
     train_loader, _ = dataloaders
     subset_loader = torch.utils.data.DataLoader(
-        torch.utils.data.Subset(train_loader.dataset, range(100)), batch_size=32
+        torch.utils.data.Subset(train_loader.dataset, range(100)),
+        batch_size=32,  # 이미 32로 되어있음
     )
     start_time = time.time()
     model.train_model(subset_loader, epochs=1, device=device)
