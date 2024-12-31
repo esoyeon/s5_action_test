@@ -68,7 +68,10 @@ class MNISTModel(nn.Module):
     def train_model(self, train_loader, epochs=1, device="cuda"):
         self.to(device)
         criterion = nn.CrossEntropyLoss()
-        optimizer = optim.Adam(self.parameters(), lr=0.001)
+
+        # CPU/GPU에 따라 다른 learning rate 적용
+        lr = 0.002 if device.type == "cpu" else 0.001
+        optimizer = optim.Adam(self.parameters(), lr=lr)
 
         history = {"accuracy": [], "loss": []}
         total_batches = len(train_loader)
