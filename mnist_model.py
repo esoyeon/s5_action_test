@@ -2,7 +2,8 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
-from torchvision import datasets, transforms
+import torchvision
+import torchvision.transforms as transforms
 import datetime
 import os
 
@@ -17,28 +18,51 @@ def set_seed(seed=42):
 class MNISTModel(nn.Module):
     def __init__(self):
         super(MNISTModel, self).__init__()
-        self.features = nn.Sequential(
-            # First conv block
-            nn.Conv2d(1, 16, kernel_size=3, padding=1),  # 28x28x16
-            nn.BatchNorm2d(16),
-            nn.ReLU(),
-            nn.MaxPool2d(2),  # 14x14x16
-            # Second conv block
-            nn.Conv2d(16, 32, kernel_size=3, padding=1),  # 14x14x32
-            nn.BatchNorm2d(32),
-            nn.ReLU(),
-            nn.MaxPool2d(2),  # 7x7x32
-            nn.Dropout(0.2),
-        )
+        # First conv block
+        self.conv1 = nn.Conv2d(1, 16, kernel_size=3, padding=1)
+        self.bn1 = nn.BatchNorm2d(16)
+        self.relu1 = nn.ReLU()
 
-        self.classifier = nn.Sequential(
-            nn.Linear(7 * 7 * 32, 10)  # Fully Connected Layer
-        )
+        # Second conv block
+        self.conv2 = nn.Conv2d(16, 32, kernel_size=3, padding=1)
+        self.bn2 = nn.BatchNorm2d(32)
+        self.relu2 = nn.ReLU()
+        self.pool1 = nn.MaxPool2d(2)
+
+        # Third conv block
+        self.conv3 = nn.Conv2d(32, 32, kernel_size=3, padding=1)
+        self.bn3 = nn.BatchNorm2d(32)
+        self.relu3 = nn.ReLU()
+        self.pool2 = nn.MaxPool2d(2)
+
+        # Fully connected layers
+        self.fc1 = nn.Linear(32 * 7 * 7, 64)
+        self.relu4 = nn.ReLU()
+        self.fc2 = nn.Linear(64, 10)
 
     def forward(self, x):
-        x = self.features(x)
-        x = torch.flatten(x, 1)
-        x = self.classifier(x)
+        # First block
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu1(x)
+
+        # Second block
+        x = self.conv2(x)
+        x = self.bn2(x)
+        x = self.relu2(x)
+        x = self.pool1(x)
+
+        # Third block
+        x = self.conv3(x)
+        x = self.bn3(x)
+        x = self.relu3(x)
+        x = self.pool2(x)
+
+        # Fully connected
+        x = x.view(-1, 32 * 7 * 7)
+        x = self.fc1(x)
+        x = self.relu4(x)
+        x = self.fc2(x)
         return x
 
     def train_model(self, train_loader, epochs=1, device="cuda"):
@@ -106,10 +130,9 @@ def load_and_preprocess_data(batch_size=64):
         [transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))]
     )
 
-    train_dataset = datasets.MNIST(
-        "./data", train=True, download=True, transform=transform
+    train_dataset = torchvision.datasets.MNIST(
+        root="./data", train=True, transform=transform, download=True
     )
-    test_dataset = datasets.MNIST("./data", train=False, transform=transform)
 
     train_loader = DataLoader(
         train_dataset,
@@ -118,6 +141,11 @@ def load_and_preprocess_data(batch_size=64):
         num_workers=0,
         generator=torch.Generator().manual_seed(42),
     )
+
+    test_dataset = torchvision.datasets.MNIST(
+        root="./data", train=False, transform=transform
+    )
+
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
     return train_loader, test_loader

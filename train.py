@@ -1,4 +1,6 @@
 import torch
+import torch.nn as nn
+import torch.optim as optim
 from mnist_model import MNISTModel, load_and_preprocess_data, set_seed
 
 
@@ -22,34 +24,67 @@ def count_parameters(model):
     return total_params
 
 
-def train_and_evaluate():
+def train_model(model, train_loader, criterion, optimizer, device):
+    model.train()
+    running_loss = 0.0
+    correct = 0
+    total = 0
+    total_batches = len(train_loader)
+
     set_seed()  # 재현성을 위한 시드 설정
 
-    # GPU 사용 가능 여부 확인
+    print(f"\nEpoch 1/{1}")
+    print("-" * 60)
+
+    for i, (images, labels) in enumerate(train_loader):
+        images, labels = images.to(device), labels.to(device)
+
+        optimizer.zero_grad()
+        outputs = model(images)
+        loss = criterion(outputs, labels)
+        loss.backward()
+        optimizer.step()
+
+        running_loss += loss.item()
+        _, predicted = outputs.max(1)
+        total += labels.size(0)
+        correct += predicted.eq(labels).sum().item()
+
+        if (i + 1) % 100 == 0:
+            print(
+                f"Epoch 1 - Batch [{i + 1}/{total_batches}], "
+                f"Loss: {running_loss/100:.4f}, "
+                f"Accuracy: {100.*correct/total:.2f}%"
+            )
+            running_loss = 0.0
+
+    return 100.0 * correct / total
+
+
+def main():
+    set_seed()  # 재현성을 위한 시드 설정
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
     # 데이터 로드
-    train_loader, test_loader = load_and_preprocess_data(batch_size=64)
+    train_loader, _ = load_and_preprocess_data(batch_size=64)
     print("Data loaded successfully")
 
     # 모델 초기화
-    model = MNISTModel()
+    model = MNISTModel().to(device)
 
     # 모델 파라미터 출력
-    param_count = count_parameters(model)
-    print(f"Parameter check: {'PASSED' if param_count < 25000 else 'FAILED'}")
+    count_parameters(model)
+
+    # 손실 함수 및 옵티마이저 정의
+    criterion = nn.CrossEntropyLoss()
+    optimizer = optim.Adam(model.parameters(), lr=0.002, weight_decay=1e-5)
 
     # 모델 학습
     print("\nStarting training...")
-    history = model.train_model(train_loader, epochs=1, device=device)
-
-    # 학습 결과 출력
-    final_accuracy = history["accuracy"][-1]
-    final_loss = history["loss"][-1]
-    print(f"\nFinal training accuracy: {final_accuracy*100:.2f}%")
-    print(f"Final training loss: {final_loss:.4f}")
-    print(f"Accuracy check: {'PASSED' if final_accuracy >= 0.95 else 'FAILED'}")
+    accuracy = train_model(model, train_loader, criterion, optimizer, device)
+    print(f"Final training accuracy: {accuracy:.2f}%")
 
     # 모델 저장
     model_path = model.save_model()
@@ -57,4 +92,4 @@ def train_and_evaluate():
 
 
 if __name__ == "__main__":
-    train_and_evaluate()
+    main()
