@@ -31,12 +31,10 @@ def test_parameter_count(model):
 def test_model_accuracy(model, dataloaders, device):
     train_loader, _ = dataloaders
     subset_loader = torch.utils.data.DataLoader(
-        torch.utils.data.Subset(train_loader.dataset, range(1000)),
+        torch.utils.data.Subset(train_loader.dataset, range(2000)),
         batch_size=32,
     )
-    # CPU일 경우 더 많은 에포크 실행
-    epochs = 3 if device.type == "cpu" else 1
-    history = model.train_model(subset_loader, epochs=epochs, device=device)
+    history = model.train_model(subset_loader, epochs=1, device=device)
     final_accuracy = history["accuracy"][-1]
     assert final_accuracy >= 0.95
 
